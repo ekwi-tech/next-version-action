@@ -1,0 +1,97 @@
+name: CI
+
+# Validates the action: the policy's own unit tests, AND the composite wired end to end.
+#
+# Running on main is not redundant — release.yml refuses to publish a commit with no successful CI run against
+# its own SHA, and a squash merge mints a brand-new SHA the PR run never covered. Without this trigger the
+# release gate would find nothing to look at on main.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  lint-workflows:
+    name: Lint GitHub Actions workflows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Run actionlint
+        uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 # 1.7.12
+        with:
+          args: -color
+
+  test-policy:
+    name: Exercise the version policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      # The policy decides the tags this action and every consumer will carry. It is not exempt from a test.
+      # No dependencies — plain python3, present on the runner.
+      - name: Run the policy unit tests
+        run: python3 test_next_version.py
+
+  self-test:
+    name: Exercise the composite end to end
+    runs-on: ubuntu-latest
+    # The unit tests prove next_version.py. This proves action.yml itself: the shallow guard, the
+    # $GITHUB_ACTION_PATH invocation and the output plumbing — none of which the Python tests can reach.
+    steps:
+      # fetch-depth: 0 — the action asserts full history is present, so a shallow checkout must make it fail.
+      # This job is also the living proof that the documented contract (fetch-depth: 0) is the real one.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Compute a pre-release version from this repo's own history
+        id: v
+        uses: ./
+        with:
+          prerelease: true
+
+      - name: The action must emit a plausible version
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          LEVEL: ${{ steps.v.outputs.level }}
+          BASE: ${{ steps.v.outputs.base }}
+        run: |
+          set -euo pipefail
+          echo "version=${VERSION} level=${LEVEL} base=${BASE}"
+          # A pre-release, well-formed, and the level is one of the three the policy can emit.
+          echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$' \
+            || { echo "::error::version '${VERSION}' is not a well-formed pre-release"; exit 1; }
+          case "$LEVEL" in major|minor|patch) ;; *) echo "::error::unexpected level '${LEVEL}'"; exit 1 ;; esac
+
+  # THE required status check, and the only one a ruleset should name. Every job above is a `needs:` here, so
+  # adding one extends what "green" means without anyone having to update the ruleset.
+  ci-gate:
+    name: CI gate
+    if: always()
+    needs: [lint-workflows, test-policy, self-test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job must have succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "upstream results: $RESULTS"
+          for r in $RESULTS; do
+            [ "$r" = "success" ] || { echo "::error::A required job did not succeed ($r)."; exit 1; }
+          done

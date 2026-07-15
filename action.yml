@@ -1,0 +1,72 @@
+# ekwi's version policy, as a reusable step.
+#
+# WHY THIS EXISTS. The policy — derive the next release version from the Conventional Commits since the last
+# STABLE tag — is a ~150-line Python file that was being COPIED into every repository that releases (the sync
+# skeleton, its client payload, ekwi-sync-common, and every future project). Copies drift, and a copy of the
+# TEST is what actually rots: a repo that carries next_version.py without test_next_version.py has an unproven
+# release policy. Here the policy and its test live once; consumers reference this action and carry neither.
+#
+# WHY A COMPOSITE, not a Docker or JS action. The logic only needs `git` and `python3`, both present on every
+# GitHub-hosted runner — so a Docker image (build + pull latency) buys nothing, and a JS rewrite would throw
+# away the Python tests and the ability to run the same script locally. A composite simply invokes the script
+# that ships alongside it, from $GITHUB_ACTION_PATH.
+#
+# WHY IT DOGFOODS ITSELF. This repository's own release.yml uses `uses: ./` to version this action — so a change
+# that breaks the policy breaks this action's own release first, which is the earliest possible signal.
+name: Next version
+description: >-
+  Derive the next release version (X.Y.Z or X.Y.Z-beta.N) from Conventional Commits since the last stable tag,
+  per ekwi's version policy. Emits version, level and base as step outputs.
+author: ekwi-tech
+
+branding:
+  icon: tag
+  color: purple
+
+inputs:
+  prerelease:
+    description: 'true to cut a pre-release (X.Y.Z-beta.N); false for a stable X.Y.Z.'
+    required: true
+  initial-version:
+    description: 'The version to emit for the very first release, when the repository has no tag yet.'
+    required: false
+    default: '0.1.0'
+
+outputs:
+  version:
+    description: 'The computed version WITHOUT a leading v (e.g. 1.2.0 or 1.2.0-beta.3).'
+    value: ${{ steps.compute.outputs.version }}
+  level:
+    description: 'The strongest bump the commits since the base call for: major, minor or patch.'
+    value: ${{ steps.compute.outputs.level }}
+  base:
+    description: 'The tag the bump was computed from, or ROOT when no stable tag exists yet.'
+    value: ${{ steps.compute.outputs.base }}
+
+runs:
+  using: composite
+  steps:
+    # The policy reads EVERY tag and the FULL commit graph. A shallow clone silently truncates both, which would
+    # make the version wrong rather than fail — the worst kind of bug. Refuse it loudly instead: the contract is
+    # `actions/checkout` with `fetch-depth: 0`, and this turns a misconfigured consumer into a clear error at the
+    # top of the log rather than a subtly wrong tag.
+    - name: Assert the full history is present
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+          echo "::error::next-version needs every tag and the full commit history, but this is a shallow clone."
+          echo "::error::Check the repository out with actions/checkout and fetch-depth: 0."
+          exit 1
+        fi
+
+    # Input passed through the environment, never interpolated into the command line — a `${{ inputs.* }}`
+    # expanded straight into `run:` is a shell-injection seam. The script writes `version=`, `level=` and `base=`
+    # to stdout, which is redirected verbatim into the step's outputs.
+    - name: Compute the next version
+      id: compute
+      shell: bash
+      env:
+        PRERELEASE: ${{ inputs.prerelease }}
+        INITIAL_VERSION: ${{ inputs.initial-version }}
+      run: python3 "$GITHUB_ACTION_PATH/next_version.py" "$PRERELEASE" >> "$GITHUB_OUTPUT"

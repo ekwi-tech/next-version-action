@@ -1,0 +1,105 @@
+name: Release
+
+# Cuts a tag + GitHub Release for the action. There is no build artifact — a composite action IS its source —
+# so this only computes the version, proves CI was green on the exact commit, and tags it.
+#
+# It DOGFOODS the action: the version is computed with `uses: ./`, the very action being released. A change that
+# breaks the policy breaks this release first.
+on:
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        description: 'Cut a pre-release (X.Y.Z-beta.N) rather than a stable X.Y.Z.'
+        required: true
+        default: true
+        type: boolean
+
+permissions: {}
+
+# The version is derived, not typed, so the group cannot key on it. One release at a time, never cancelled:
+# an interrupted run could leave a tag without the release that documents it.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Compute the version, prove CI green, tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create the tag + the GitHub Release
+      actions: read     # read CI's conclusion for the green-build gate
+
+    steps:
+      - name: Refuse to release from a branch other than main
+        run: |
+          if [ "${GITHUB_REF_NAME}" != "main" ]; then
+            echo "::error::Releases are cut from main only — this run targets '${GITHUB_REF_NAME}'"
+            exit 1
+          fi
+
+      # fetch-depth: 0 gives git-cliff and the action itself the full history and every tag.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Dogfooding: the action versions itself with its own policy. No pinned SHA here on purpose — `uses: ./`
+      # releases exactly the code in the working tree, which is the code being tagged.
+      - name: Compute the next version
+        id: version
+        uses: ./
+        with:
+          prerelease: ${{ inputs.prerelease }}
+
+      - name: Refuse to overwrite an existing tag
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
+            echo "::error::Tag v${VERSION} already exists"
+            exit 1
+          fi
+
+      # "Green before ship", where it cannot be argued with. It is also why ci.yml runs on main: a squash merge
+      # mints a brand-new SHA the PR run never covered, and this gate looks up the run for THAT SHA.
+      - name: Require a successful CI run on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SHA="$(git rev-parse HEAD)"
+          successes="$(gh api \
+            "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SHA}" \
+            --jq '[.workflow_runs[] | select(.conclusion == "success")] | length')"
+          if [ "${successes}" -eq 0 ]; then
+            echo "::error::No successful CI run for ${SHA} — refusing to release an unvalidated action"
+            exit 1
+          fi
+          echo "CI is green for ${SHA} (${successes} successful run(s))"
+
+      # The release body is the DELTA since the last tag, and only that.
+      - name: Generate the release notes with git-cliff
+        id: notes
+        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4
+        with:
+          config: cliff.toml
+          args: --unreleased --tag v${{ steps.version.outputs.version }} --strip all
+
+      # A hyphen means pre-release (semver), and GitHub's "latest" excludes those. The hyphen is put there by
+      # next_version.py and by nothing else, so this glob is exact.
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          NOTES_FILE: ${{ steps.notes.outputs.changelog }}
+        run: |
+          set -euo pipefail
+          prerelease_flag=""
+          case "$VERSION" in *-*) prerelease_flag="--prerelease" ;; esac
+
+          gh release create "v${VERSION}" \
+            --target "$(git rev-parse HEAD)" \
+            --title "next-version-action v${VERSION}" \
+            --notes-file "${NOTES_FILE}" \
+            $prerelease_flag

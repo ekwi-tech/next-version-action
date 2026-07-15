@@ -1,0 +1,39 @@
+name: Semantic PR Title
+
+# The version this action ships is DERIVED from the Conventional Commits on main — see next_version.py, which
+# this action runs on itself. So an unparseable subject is not a style problem, it is a correctness one, and it
+# fails SILENTLY: a `feat` merged as "add the thing" is read as a patch, and the release goes out as 1.0.1 when
+# it should have been 1.1.0. cliff.toml drops it from the notes on the same grounds (filter_unconventional).
+#
+# If you squash-merge, the PR title becomes the commit subject verbatim, so validating the title validates the
+# commit. Make this a REQUIRED check in a ruleset on this repo to give it teeth — this repo is not covered by
+# the org's `ekwi-sync-*` ruleset.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  validate-pr-title:
+    name: Enforce Conventional Commits format on PR title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # The same ten types as the rest of the ecosystem — one vocabulary everywhere.
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            build
+            chore
+            ci
+            docs
+            style
+            test
+          requireScope: false

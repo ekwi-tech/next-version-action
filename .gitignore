@@ -1,0 +1,3 @@
+# Python bytecode from running the policy tests locally.
+__pycache__/
+*.py[cod]
