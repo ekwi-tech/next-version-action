@@ -9,13 +9,13 @@ on:
   workflow_dispatch:
     inputs:
       channel:
-        description: 'Release channel — pre-release cuts X.Y.Z-beta.N, stable cuts X.Y.Z.'
+        description: 'Release channel — pre-release cuts X.Y.Z-beta.N, latest cuts a stable X.Y.Z.'
         required: true
         default: pre-release
         type: choice
         options:
           - pre-release
-          - stable
+          - latest
 
 permissions: {}
 
