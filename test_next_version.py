@@ -43,6 +43,14 @@ CASES: list[tuple[str, list[tuple[str, str]], bool, str]] = [
         "1.0.0",
     ),
     (
+        # Promoting the terminal beta is a state transition, not an empty release — it must succeed with no new
+        # commit. The converse (a NEW empty beta) stays refused; see the refusals block below.
+        "betas only — promoting the terminal beta with no new commit still yields the stable",
+        [("commit", "feat: initial"), ("tag", "v1.0.0-beta.6")],
+        False,
+        "1.0.0",
+    ),
+    (
         "stable + a feat — a new beta series opens",
         [("commit", "feat: initial"), ("tag", "v1.0.0"), ("commit", "feat: new thing")],
         True,
@@ -156,22 +164,37 @@ def main() -> None:
         print(f"  {status}   {name}\n         expected {expected}, got {got}")
 
     # A release with nothing in it is a mistake, not a no-op — the policy must refuse rather than invent a patch.
-    with tempfile.TemporaryDirectory() as tmp:
-        repo = Path(tmp)
-        build(repo, [("commit", "feat: initial"), ("tag", "v1.0.0")])
-        out = subprocess.run(
-            [sys.executable, str(SCRIPT), "false"], cwd=repo, capture_output=True, text=True
-        )
-        if out.returncode == 0:
-            print("  FAIL   refuses to release when there is no commit since the last tag")
-            failures += 1
-        else:
-            print("  ok     refuses to release when there is no commit since the last tag")
+    # These expected-failure cases cannot live in CASES (which asserts a version): each pins a distinct refusal.
+    refusals = [
+        (
+            "refuses to release when there is no commit since the last stable tag",
+            [("commit", "feat: initial"), ("tag", "v1.0.0")],
+            "false",
+        ),
+        (
+            # Scope guard: the promote-pristine exemption is promotion-only; a NEW empty beta stays refused.
+            "refuses a NEW beta when there is no commit since the terminal beta",
+            [("commit", "feat: initial"), ("tag", "v1.0.0-beta.6")],
+            "true",
+        ),
+    ]
+    for name, history, prerelease_arg in refusals:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            build(repo, history)
+            out = subprocess.run(
+                [sys.executable, str(SCRIPT), prerelease_arg], cwd=repo, capture_output=True, text=True
+            )
+            if out.returncode == 0:
+                print(f"  FAIL   {name}")
+                failures += 1
+            else:
+                print(f"  ok     {name}")
 
     print()
     if failures:
         sys.exit(f"{failures} failing case(s).")
-    print(f"All {len(CASES) + 1} cases pass.")
+    print(f"All {len(CASES) + len(refusals)} cases pass.")
 
 
 if __name__ == "__main__":

@@ -56,7 +56,9 @@ one-time org setting; there is nothing in the consuming repo that can reveal it 
 | `base` | The tag the bump was computed from, or `ROOT` when no stable tag exists yet. |
 
 The action **fails** (non-zero) when there is nothing to release — no commit since the base — rather than
-inventing a patch bump.
+inventing a patch bump. The one exception is **promoting a terminal pre-release to its stable** (`prerelease:
+false` over the last `X.Y.Z-beta.N`): dropping the `-beta` suffix is a state transition, not an empty release,
+so it succeeds with no fresh commit.
 
 ---
 
