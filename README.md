@@ -79,3 +79,5 @@ rest of the ecosystem uses. A floating `@main` would push a policy change to eve
 - CI runs the unit tests **and** a self-test that exercises the composite end to end (`.github/workflows/ci.yml`).
 - Releases are cut from *Actions → Release*; the workflow **dogfoods** the action to version itself. The version
   is derived, so you choose only beta-or-stable — see [`next_version.py`](./next_version.py).
+- **`.github/dependabot.yml`** / **`.github/CODEOWNERS`** — monthly SHA-pin bumps owned by ekwi-bot, reviews
+  routed to the code owner. `release-notes-action` is repinned by hand, not by Dependabot.

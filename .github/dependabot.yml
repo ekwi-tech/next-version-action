@@ -1,0 +1,24 @@
+version: 2
+
+# Without this file the "pinned by SHA, bumped by Dependabot" contract (README, "Pinning and rollout") has
+# nothing behind it — the SHA pins freeze and rot. directory "/" also scans this repo's own action.yml.
+#
+# assignees is ekwi-bot (the PR is owned by automation; Dependabot honours assignees only for write-access
+# accounts). Who REVIEWS is CODEOWNERS' job — GitHub removed dependabot.yml's reviewers: option on 2025-08-08.
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    assignees:
+      - ekwi-bot
+    commit-message:
+      prefix: ci          # Conventional Commits type — commitlint.yml accepts it
+    groups:
+      actions-all:
+        patterns:
+          - "*"
+    # release-notes-action co-evolves with this repo and is repinned by hand (beta -> stable, our cadence). Left
+    # to Dependabot the two repos ping-pong bump PRs; ignore it. Symmetric ignore lives in its own dependabot.yml.
+    ignore:
+      - dependency-name: "ekwi-tech/release-notes-action"
