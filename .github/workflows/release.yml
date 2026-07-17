@@ -8,11 +8,14 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      prerelease:
-        description: 'Cut a pre-release (X.Y.Z-beta.N) rather than a stable X.Y.Z.'
+      channel:
+        description: 'Release channel — pre-release cuts X.Y.Z-beta.N, stable cuts X.Y.Z.'
         required: true
-        default: true
-        type: boolean
+        default: pre-release
+        type: choice
+        options:
+          - pre-release
+          - stable
 
 permissions: {}
 
@@ -51,7 +54,8 @@ jobs:
         id: version
         uses: ./
         with:
-          prerelease: ${{ inputs.prerelease }}
+          # The action's contract stays boolean; the dropdown maps to it here.
+          prerelease: ${{ inputs.channel == 'pre-release' }}
 
       - name: Refuse to overwrite an existing tag
         env:
