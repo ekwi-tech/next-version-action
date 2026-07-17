@@ -107,6 +107,6 @@ jobs:
 
           gh release create "v${VERSION}" \
             --target "$(git rev-parse HEAD)" \
-            --title "next-version-action v${VERSION}" \
+            --title "${VERSION}" \
             --notes-file "${NOTES_FILE}" \
             $prerelease_flag
