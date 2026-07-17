@@ -75,13 +75,19 @@ def parse_tags() -> list[tuple[tuple[int, int, int, int], str]]:
     return sorted(out)
 
 
-def bump_level(base_ref: str) -> str:
-    """The strongest bump the commits since base_ref call for."""
+def bump_level(base_ref: str, allow_empty: bool = False) -> str:
+    """The strongest bump the commits since base_ref call for.
+
+    An empty range is refused as a mistake, except when allow_empty: promoting a terminal pre-release to its
+    stable is a state transition, not an empty release, so it needs no fresh commit.
+    """
     rng = f"{base_ref}..HEAD" if base_ref else "HEAD"
     # %x00 between records: a commit body may contain anything, including blank lines.
     raw = git("log", rng, "--format=%B%x00")
     messages = [m.strip() for m in raw.split("\x00") if m.strip()]
     if not messages:
+        if allow_empty:
+            return "patch"  # nothing new to weigh; the promotion itself is the change
         sys.exit(f"::error::No commits since {base_ref or 'the root'} — there is nothing to release.")
 
     level = "patch"
@@ -124,8 +130,10 @@ def main() -> None:
     elif highest:
         # Pre-1.0 of anything: the existing betas ARE the run-up to that X.Y.Z. It is the target, not something
         # to bump away from — otherwise a feat between two betas would retarget the release nobody asked to move.
+        # allow_empty when promoting: the terminal beta ships as its stable with no new commit. A NEW beta must
+        # still have something new, so the empty-range guard holds when prerelease.
         base_tag = ""
-        level = bump_level(highest[1])
+        level = bump_level(highest[1], allow_empty=not prerelease)
         target = highest[0][:3]
     else:
         base_tag = ""
