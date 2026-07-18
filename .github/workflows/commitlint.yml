@@ -15,4 +15,4 @@ jobs:
     # check: "Semantic Checks / PR title / Conventional Commits on PR Title".
     permissions:
       pull-requests: read
-    uses: ekwi-tech/release-workflow/.github/workflows/commitlint-reusable.yml@87dd8ec7e9eb1ca81c4acc346dd7b1dcf1cc3d48 # v0.1.0
+    uses: ekwi-tech/release-workflow/.github/workflows/commitlint-reusable.yml@3a747dc7143a2179cedec8f606cf2c9ec7b55d12 # v0.1.0
