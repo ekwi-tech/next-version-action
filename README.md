@@ -11,16 +11,11 @@ holds its target and a breaking change mid-series legitimately retargets it.
 
 ---
 
-## ⚠ Prerequisite — this is a PRIVATE action
+## Public on purpose
 
-To `uses:` a private action from another private repository in the same organisation, the org must allow it:
-
-> **`next-version-action` → Settings → Actions → General → Access →
-> "Accessible from repositories in the `ekwi-tech` organization".**
-
-Without it, every `uses: ekwi-tech/next-version-action@…` fails with `repository not found` — the same silent,
-hard-to-place failure mode as installing a GitHub App on *selected* rather than *all* repositories. It is a
-one-time org setting; there is nothing in the consuming repo that can reveal it is missing.
+This action is **public**, so any consumer — public or private — can `uses:` it with no org access setting to
+forget. A composite action carries no secrets, and a **public** consumer (such as the `composer-attribute-collector`
+fork) cannot reference a **private** action at all; public is what lets every repo in the fleet use it uniformly.
 
 ---
 
