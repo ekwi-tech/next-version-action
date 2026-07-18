@@ -18,7 +18,11 @@ updates:
       actions-all:
         patterns:
           - "*"
-    # release-notes-action co-evolves with this repo and is repinned by hand (beta -> stable, our cadence). Left
-    # to Dependabot the two repos ping-pong bump PRs; ignore it. Symmetric ignore lives in its own dependabot.yml.
+    # Two cycles broken by ignoring the dependency here — in both cases the OTHER repo keeps watching us, so the
+    # rollout stays one-way:
+    # - release-notes-action co-evolves with this repo (repinned by hand); left to Dependabot the two ping-pong.
+    # - release-workflow is consumed back now: this repo's commitlint.yml calls its reusable, while release-workflow
+    #   already pins this action. Watching it here would ping-pong; ignore it (release-workflow keeps watching us).
     ignore:
       - dependency-name: "ekwi-tech/release-notes-action"
+      - dependency-name: "ekwi-tech/release-workflow"

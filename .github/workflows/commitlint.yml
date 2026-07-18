@@ -1,39 +1,18 @@
-name: Semantic PR Title
+name: Semantic Checks
 
-# The version this action ships is DERIVED from the Conventional Commits on main — see next_version.py, which
-# this action runs on itself. So an unparseable subject is not a style problem, it is a correctness one, and it
-# fails SILENTLY: a `feat` merged as "add the thing" is read as a patch, and the release goes out as 1.0.1 when
-# it should have been 1.1.0. The release-notes-action's cliff.toml drops it on the same grounds (filter_unconventional).
-#
-# If you squash-merge, the PR title becomes the commit subject verbatim, so validating the title validates the
-# commit. Make this a REQUIRED check in a ruleset on this repo to give it teeth — this repo is not covered by
-# the org's `ekwi-sync-*` ruleset.
+# Enforces a Conventional-Commit PR title by calling the fleet's shared reusable — the action pin and the ten-type
+# vocabulary live once in release-workflow, adopted here by bumping the pinned SHA (Dependabot tracks it).
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
 
-permissions:
-  pull-requests: read
+permissions: {}
 
 jobs:
-  validate-pr-title:
-    name: Enforce Conventional Commits format on PR title
-    runs-on: ubuntu-latest
-    steps:
-      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          # The same ten types as the rest of the ecosystem — one vocabulary everywhere.
-          types: |
-            feat
-            fix
-            perf
-            refactor
-            build
-            chore
-            ci
-            docs
-            style
-            test
-          requireScope: false
+  title:
+    name: PR title
+    # The caller grants the token scope; the reusable reads the PR title via the automatic GITHUB_TOKEN. Resulting
+    # check: "Semantic Checks / PR title / Conventional Commits on PR Title".
+    permissions:
+      pull-requests: read
+    uses: ekwi-tech/release-workflow/.github/workflows/commitlint-reusable.yml@87dd8ec7e9eb1ca81c4acc346dd7b1dcf1cc3d48 # v0.1.0
